@@ -4,6 +4,10 @@ doctest Final
 doctest Server
 doctest Client
 
+test "Debug" do
+  Final.main(["10", "5"]) == "hello"
+end
+
 test "Register User Test" do
   :ets.new(:serverNode, [:set, :public, :named_table])
   {:ok,serverPID} = Server.start_link()

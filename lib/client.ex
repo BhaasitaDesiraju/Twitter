@@ -130,6 +130,44 @@ retweetDetail = GenServer.call(serverPID, {:getTweetToRetweet, userName})
 retweetDetail
 end
 
+#Query by hashtag
+def queryHashTag(serverPID, numOfUsers) do
+    #select a random hashtag and call the server to fetch all the tweets with hashtags
+    randomHashTag = getRandomHashtags()
+    GenServer.cast(serverPID, {:queryHashTag, randomHashTag, numOfUsers})
+end
+
+#Query by Mention
+def queryMention(serverPID, numOfUsers) do
+    randomUserName = getRandomUser(numOfUsers)
+    GenServer.cast(serverPID, {:queryMention, randomUserName, numOfUsers})
+end
+
+#Query for a user you subscribed to
+def queryForSubscribedTo(numOfUsers, serverPID) do
+    randomUser = getRandomUser(numOfUsers)
+    followingList = getFollowingList(serverPID, randomUser)
+    randomSubscribedTo =if !Enum.empty?(followingList) do
+                            Enum.random(followingList)
+                        else
+                            ""
+                        end
+    if randomSubscribedTo != "" do
+        getTweetsOfSubscribedTo(serverPID, randomUser, randomSubscribedTo)
+    else
+        queryForSubscribedTo(numOfUsers, serverPID)
+    end
+end
+
+def getFollowingList(serverPID, userName) do
+    followingUsersList = GenServer.call(serverPID, {:getfollowingUsers, userName})
+    followingUsersList
+end
+
+def getTweetsOfSubscribedTo(serverPID, userName, userSubscribedTo) do
+    GenServer.cast(serverPID, {:getAllTweets, userName, userSubscribedTo})
+end
+
 #Register Account for  new User.
 def registerUser(serverPID, userName, userPID) do
     GenServer.cast(serverPID, {:registerUser,userName,userPID})
@@ -166,6 +204,9 @@ def followerGenerator(serverPID, _userName, numOfUsers, numOfRequests, userPID) 
     tweetWithHashtags(numOfUsers, numOfRequests, serverPID, userPID)
     tweetWithMentions(numOfUsers, numOfRequests, serverPID, userPID)
     sendRetweets(serverPID, numOfUsers, userPID)
+    queryHashTag(serverPID, numOfUsers)
+    queryMention(serverPID, numOfUsers)
+    queryForSubscribedTo(numOfUsers, serverPID)
 end
 
 #generate followers for a user

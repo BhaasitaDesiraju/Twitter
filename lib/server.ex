@@ -155,6 +155,64 @@ def handle_cast({:sendRetweets, userName, retweet, retweetOfUser, userPID}, stat
     {:noreply, state}
 end
 
+#Server call for querying using hashtag
+@impl true
+def handle_cast({:queryHashTag, randomHashTag, numOfUsers}, state) do
+    IO.inspect("Tweets with #{randomHashTag} are:")
+    Enum.each(1..numOfUsers, fn x ->
+        userName = "User"<>Integer.to_string(x)
+        listOfTweets = elem(Enum.at(:ets.lookup(:hashtagsRegister, userName),0),3)
+        if !Enum.empty?(listOfTweets) do
+            patternMatcher = Enum.at(Tuple.to_list(Regex.compile(randomHashTag)), 1)
+            Enum.each(listOfTweets, fn tweet ->
+                if(String.match?(tweet, patternMatcher)) do
+                    IO.inspect(tweet)
+                end
+            end)
+        end
+
+    end)
+    {:noreply, state}
+end
+
+#Server call for querying using mention
+@impl true
+def handle_cast({:queryMention, mentionedUserName, numOfUsers}, state) do
+    IO.inspect("Tweets in which @#{mentionedUserName} is mentioned are:")
+    mentionedUser = "@" <> mentionedUserName
+    Enum.each(1..numOfUsers, fn x ->
+        userName = "User"<>Integer.to_string(x)
+        listOfTweets = elem(Enum.at(:ets.lookup(:mentionsRegister, userName),0),3)
+        if !Enum.empty?(listOfTweets) do
+            patternMatcher = Enum.at(Tuple.to_list(Regex.compile(mentionedUser)), 1)
+            Enum.each(listOfTweets, fn tweet ->
+                if(String.match?(tweet, patternMatcher)) do
+                    IO.inspect("#{mentionedUserName} was mentioned by #{userName} in tweet: #{tweet}")
+                end
+            end)
+        end
+
+    end)
+    {:noreply, state}
+end
+@impl true
+def handle_cast({:getAllTweets, userName, userSubscribedTo},state) do
+    followingTweetsList = elem(Enum.at(:ets.lookup(:tweetsRegister, userSubscribedTo),0),3)
+    IO.puts("The tweets of #{userSubscribedTo} as Queried by #{userName}")
+    if !Enum.empty?(followingTweetsList) do
+        Enum.each(followingTweetsList, fn tweets ->
+                    IO.puts(tweets) end)
+    else
+        IO.puts("There are no Tweets by #{userSubscribedTo}")
+    end
+    {:noreply, state}
+end
+
+@impl true
+def handle_call({:getfollowingUsers, userName}, _from, state) do
+    followingUsersList = elem(Enum.at(:ets.lookup(:followingRegister,userName),0),1)
+    {:reply, followingUsersList, state}
+end
 
 @impl true
 def handle_call({:getTweetToRetweet, userName}, _from, state) do

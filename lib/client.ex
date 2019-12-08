@@ -1,5 +1,6 @@
 defmodule Client do
 use GenServer
+
 #Start client PIDs
 def start_link(userName, numOfUsers, numOfFollowing,isExistingUser) do
     GenServer.start_link(__MODULE__, [userName, numOfUsers, numOfFollowing,isExistingUser])
@@ -7,7 +8,7 @@ end
 
 #handle client functions after starting them
 @impl true
-def init([userName, numOfUsers, numOfRequests, isExistingUser]) do
+def init([userName, numOfUsers, numOfRequests, _isExistingUser]) do
     serverPID = elem(Enum.at(:ets.lookup(:serverNode,"Server"),0),1)
     userPID = self()
     registerUser(serverPID, userName, userPID)
@@ -15,9 +16,24 @@ def init([userName, numOfUsers, numOfRequests, isExistingUser]) do
         {:userRegistered, userName} -> IO.puts("#{userName} is now registered!")
     end
 
-    followerGenerator(serverPID, userName, numOfUsers, numOfRequests, userPID)
     usersToDelete = round(Float.ceil(0.1 * numOfUsers))
+    numOfUsersToDisconnect = round(Float.ceil(0.4 * numOfUsers))
+    twitterHandler(serverPID, userName, numOfUsers, numOfRequests, userPID, usersToDelete, numOfUsersToDisconnect)
+end
+
+def twitterHandler(serverPID, userName, numOfUsers, numOfRequests, userPID, usersToDelete, numOfUsersToDisconnect) do
+    followerGenerator(serverPID, userName, numOfUsers, numOfRequests, userPID)
+    tweetForUser(numOfUsers, numOfRequests, serverPID, userPID)
+    tweetWithHashtags(numOfUsers, numOfRequests, serverPID, userPID)
+    tweetWithMentions(numOfUsers, numOfRequests, serverPID, userPID)
+    sendRetweets(serverPID, numOfUsers, userPID)
+    queryForSubscribedTo(numOfUsers, serverPID)
+    queryHashTag(serverPID, numOfUsers)
+    queryMention(serverPID, numOfUsers)
+    getLiveView(serverPID, numOfUsers)
     deleteUsers(usersToDelete, serverPID, numOfUsers)
+    disconnectUsers(numOfUsersToDisconnect, serverPID, numOfUsers)
+    reconnectUsers(serverPID, numOfUsers)
 end
 
 # randomly pick a tweet from tweest list and use it for a user
@@ -55,6 +71,10 @@ def getRandomUser(numOfUsers) do
     randomUser
 end
 
+def isExistingUser(serverPID, userName) do
+    check = GenServer.call(serverPID, {:isExistingUser,userName})
+    check
+end
 
 def tweetForUser(numOfUsers, numOfRequests, serverPID, userPID) do
     # get a random user from global register
@@ -62,7 +82,7 @@ def tweetForUser(numOfUsers, numOfRequests, serverPID, userPID) do
         if(getTweetLimit(serverPID, randomUser) > numOfRequests) do
         # if user reached tweet limit pick another user
         tweetForUser(numOfUsers, numOfRequests, serverPID, userPID)
-    end
+        end
     tweetGenerator(numOfRequests, serverPID, randomUser, userPID)
 end
 
@@ -119,10 +139,18 @@ retweetDetail = getRetweet(serverPID, userName)
 if(!Enum.empty?(retweetDetail)) do
     retweet = Enum.at(retweetDetail, 1)
     retweetOfUser = Enum.at(retweetDetail, 0)
-    GenServer.cast(serverPID, {:sendRetweets, userName, retweet, retweetOfUser, userPID})
+    sendReTweetCast(serverPID, userName, retweet, retweetOfUser, userPID)
 else
     sendRetweets(serverPID, numOfUsers, userPID)
 end
+end
+
+def sendReTweetCast(serverPID, userName, retweet, retweetOfUser, userPID) do
+    if(isExistingUser(serverPID, userName)) do
+        GenServer.cast(serverPID, {:sendRetweets, userName, retweet, retweetOfUser, userPID})
+    else
+        raise UserNotFoundError
+    end
 end
 
 def getRetweet(serverPID, userName) do
@@ -137,10 +165,19 @@ def queryHashTag(serverPID, numOfUsers) do
     GenServer.cast(serverPID, {:queryHashTag, randomHashTag, numOfUsers})
 end
 
+
 #Query by Mention
 def queryMention(serverPID, numOfUsers) do
     randomUserName = getRandomUser(numOfUsers)
+    queryByMention(serverPID,randomUserName, numOfUsers)
+end
+
+def queryByMention(serverPID, randomUserName, numOfUsers) do
+    if(isExistingUser(serverPID, randomUserName)) do
     GenServer.cast(serverPID, {:queryMention, randomUserName, numOfUsers})
+    else
+    raise UserNotFoundError
+end
 end
 
 #Query for a user you subscribed to
@@ -175,7 +212,11 @@ end
 
 #send tweets
 def sendTweets(serverPID, userName, userPID, numOfRequests, tweets) do
+if(isExistingUser(serverPID, userName)) do
     GenServer.cast(serverPID, {:userTweet, userName, userPID, numOfRequests, tweets})
+else
+    raise UserNotFoundError
+end
 end
 
     #get the tweetlimit which should be less than the numOfRequests
@@ -186,11 +227,19 @@ end
 
 #send tweets with hashtags
 def sendTweetsWithHashtags(serverPID, userName, userPID, numOfRequests, tweets) do
+if(isExistingUser(serverPID, userName)) do
     GenServer.cast(serverPID, {:userTweetWithHashtags, userName, userPID, numOfRequests, tweets})
+else
+    raise UserNotFoundError
+end
 end
 #send tweets with mentions
 def sendTweetsWithMention(serverPID, userName, userPID, numOfRequests, tweet, mentionedUser) do
+if(isExistingUser(serverPID, userName)) do
     GenServer.cast(serverPID, {:userTweetWithMention, userName, userPID, numOfRequests, tweet, mentionedUser})
+else
+    raise UserNotFoundError
+end
 end
 
 def followerGenerator(serverPID, userName, numOfUsers, numOfRequests, userPID) when numOfRequests > 0 do
@@ -200,13 +249,13 @@ end
 
 def followerGenerator(serverPID, _userName, numOfUsers, numOfRequests, userPID) when numOfRequests == 0 do
     # randomly pick a tweet from list and use it for a user
-    tweetForUser(numOfUsers, numOfRequests, serverPID, userPID)
-    tweetWithHashtags(numOfUsers, numOfRequests, serverPID, userPID)
-    tweetWithMentions(numOfUsers, numOfRequests, serverPID, userPID)
-    sendRetweets(serverPID, numOfUsers, userPID)
-    queryHashTag(serverPID, numOfUsers)
-    queryMention(serverPID, numOfUsers)
-    queryForSubscribedTo(numOfUsers, serverPID)
+    # tweetForUser(numOfUsers, numOfRequests, serverPID, userPID)
+    # tweetWithHashtags(numOfUsers, numOfRequests, serverPID, userPID)
+    # tweetWithMentions(numOfUsers, numOfRequests, serverPID, userPID)
+    # sendRetweets(serverPID, numOfUsers, userPID)
+    # queryHashTag(serverPID, numOfUsers)
+    # queryMention(serverPID, numOfUsers)
+    # queryForSubscribedTo(numOfUsers, serverPID)
 end
 
 #generate followers for a user
@@ -228,9 +277,49 @@ def getFollower(userName, numOfUsers) do
 end
 
 def deleteUsers(usersToDelete, serverPID, numOfUsers) do
-    # when usersToDelete > 0
     deleteUserName = getRandomUser(numOfUsers)
+    if(isExistingUser(serverPID, deleteUserName)) do
     GenServer.cast(serverPID, {:deleteRandomUsers, deleteUserName, usersToDelete})
+    else
+    raise UserNotFoundError
+end
+end
+
+def disconnectUsers(numOfUsersToDisconnect, serverPID, numOfUsers) do
+    userToDisconnect = getRandomUser(numOfUsers)
+    GenServer.cast(serverPID, {:disconnectRandomUsers, userToDisconnect, numOfUsersToDisconnect})
+end
+
+def reconnectUsers(serverPID, numOfUsers) do
+    userToReconnect = getDisconnectedUser(serverPID, numOfUsers)
+    if userToReconnect != " " do
+        GenServer.cast(serverPID, {:reconnectUser, userToReconnect})
+    end
+end
+
+def getDisconnectedUser(serverPID, numOfUsers) do
+    disconnectedUsersList = GenServer.call(serverPID, {:getDisconnectedUsers, numOfUsers})
+    disconnectUser =     if !Enum.empty?(disconnectedUsersList) do
+                            Enum.random(disconnectedUsersList)
+                         else
+                            " "
+                         end
+    disconnectUser
+end
+
+
+
+def getLiveView(serverPID, numOfUsers) do
+    userName = getRandomUser(numOfUsers)
+    disconnectedUsersList = getDisconnectedUserList(serverPID, numOfUsers)
+    if (!Enum.member?(disconnectedUsersList, userName)) do
+        GenServer.cast(serverPID, {:getLiveView, userName})
+    end
+end
+
+def getDisconnectedUserList(serverPID, numOfUsers) do
+    disconnectedUserList = GenServer.call(serverPID, {:getDisconnectedUsers, numOfUsers})
+    disconnectedUserList
 end
 
 end

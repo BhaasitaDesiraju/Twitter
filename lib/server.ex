@@ -248,6 +248,27 @@ def handle_cast({:disconnectRandomUsers, userToDisconnect, numOfUsersToDisconnec
 end
 
 @impl true
+def handle_cast({:addToZipfFollowers, userName, userFollowers}, state) do
+    if (userFollowers != nil or userFollowers != []) do
+        :ets.insert(:followersRegister, {userName, userFollowers})
+        Enum.each(userFollowers, fn(follower) ->
+            currentFollowingTuple = :ets.lookup(:followingRegister,follower)
+            if currentFollowingTuple != [] do
+                currentFollowingList = elem(Enum.at(currentFollowingTuple, 0),1)
+                updatedFollowingList =  if(!Enum.member?(currentFollowingList, userName)) do
+                    currentFollowingList ++ [userName]
+                else
+                    currentFollowingList
+                end
+
+                :ets.insert(:followingRegister, {follower, updatedFollowingList})
+            end
+        end)
+    end
+    {:noreply, state}
+end
+
+@impl true
 def handle_call({:isExistingUser, userName}, _from, state) do
     userTuple = :ets.lookup(:userRegister,userName)
     check = if(userTuple != []) do

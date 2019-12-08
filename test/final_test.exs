@@ -221,9 +221,39 @@ test "Query with hashtag for a random tweet" do
 end
 
 # test for query by subscto - 2
-# test "test query by subscribed to" do
+test "test query by subscribed to" do
+  numOfRequests = 5
+  numOfUsers = 10
+  :ets.new(:serverNode, [:set, :public, :named_table])
+  {:ok,serverID} = Server.start_link()
+  serverPID = elem(Enum.at(:ets.lookup(:serverNode,"Server"),0),1)
+  userName = "testUser11"
+  subscribedUser = "testUser13"
+ Client.registerUser(serverPID, subscribedUser, self())
+  err = try do
+    Client.getTweetsOfSubscribedTo(serverPID, userName, subscribedUser)
+  rescue
+    e in UserNotFoundError -> e
+  end
+  assert err.message == "User not found!"
+end
 
-# end
+test "test query by subscribed to for an unregistered user" do
+  numOfRequests = 5
+  numOfUsers = 10
+  :ets.new(:serverNode, [:set, :public, :named_table])
+  {:ok,serverID} = Server.start_link()
+  serverPID = elem(Enum.at(:ets.lookup(:serverNode,"Server"),0),1)
+  userName = "testUser11"
+  subscribedUser = "testUser13"
+ Client.registerUser(serverPID, subscribedUser, self())
+  err = try do
+    Client.getTweetsOfSubscribedTo(serverPID, userName, subscribedUser)
+  rescue
+    e in UserNotFoundError -> e
+  end
+  assert err.message == "User not found!"
+end
 
 # test for followers - 2
 

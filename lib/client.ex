@@ -27,13 +27,14 @@ def twitterHandler(serverPID, userName, numOfUsers, numOfRequests, userPID, user
     tweetWithHashtags(numOfUsers, numOfRequests, serverPID, userPID)
     tweetWithMentions(numOfUsers, numOfRequests, serverPID, userPID)
     sendRetweets(serverPID, numOfUsers, userPID)
+    getLiveView(serverPID, numOfUsers)
     queryForSubscribedTo(numOfUsers, serverPID)
     queryHashTag(serverPID, numOfUsers)
     queryMention(serverPID, numOfUsers)
-    getLiveView(serverPID, numOfUsers)
     deleteUsers(usersToDelete, serverPID, numOfUsers)
     disconnectUsers(numOfUsersToDisconnect, serverPID, numOfUsers)
     reconnectUsers(serverPID, numOfUsers)
+    createFollowers(serverPID, numOfUsers, 1, userPID)
 end
 
 # randomly pick a tweet from tweest list and use it for a user
@@ -202,7 +203,11 @@ def getFollowingList(serverPID, userName) do
 end
 
 def getTweetsOfSubscribedTo(serverPID, userName, userSubscribedTo) do
+    if(isExistingUser(serverPID, userName)) do
     GenServer.cast(serverPID, {:getAllTweets, userName, userSubscribedTo})
+    else
+        raise UserNotFoundError
+    end
 end
 
 #Register Account for  new User.
@@ -321,5 +326,55 @@ def getDisconnectedUserList(serverPID, numOfUsers) do
     disconnectedUserList = GenServer.call(serverPID, {:getDisconnectedUsers, numOfUsers})
     disconnectedUserList
 end
+
+def createFollowers(serverPID, numOfUsers, userCount, userPID) when userCount <= numOfUsers do
+    userName = "User" <> Integer.to_string(userCount)
+    followerList = getZipfFollowers(numOfUsers)
+    userFollowers = Enum.at(followerList, userCount-1)
+    if userFollowers != nil or userFollowers != [] do
+        addFollowers(userName, serverPID, userFollowers)
+        createFollowers(serverPID, numOfUsers, userCount + 1, userPID)
+    else
+        createFollowers(serverPID, numOfUsers, userCount + 1, userPID)
+    end
+end
+
+def createFollowers(_serverPID, numOfUsers, userCount, _userPID) when userCount > numOfUsers do
+end
+
+def addZipfFollowers(userName, serverPID, userFollowers) do
+    GenServer.cast(serverPID, {:addToZipfFollowers, userName, userFollowers})
+end
+
+
+
+#___________________BONUS PART___________________
+
+def getZipfFollowers(numOfUsers) do
+    usersList = Enum.map(1..numOfUsers, fn(users)->
+                        "User" <> Integer.to_string(users)
+                        end )
+    zipfConstant = getZipfConstant(numOfUsers, 1 , 0)
+    zipfConstant = (1/zipfConstant) * numOfUsers
+
+    zipfFollowersList = Enum.map(1..length(usersList),fn(userNum)->
+
+      numOfZipfFollowers = zipfConstant/userNum
+      userName = "User" <> Integer.to_string(userNum)
+      usersList = usersList -- [userName]
+      zipfFollowersList = Enum.take_random(usersList, round(numOfZipfFollowers))
+      zipfFollowersList
+    end)
+    zipfFollowersList
+  end
+
+  def getZipfConstant(numOfUsers, count, zipfConstantValue) when count <= numOfUsers do
+    zipfConstantValue = zipfConstantValue + (1/count)
+    getZipfConstant(numOfUsers, count + 1, zipfConstantValue)
+  end
+
+  def getZipfConstant(numOfUsers, count, zipfConstantValue) when count > numOfUsers do
+    zipfConstantValue
+  end
 
 end

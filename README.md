@@ -3,8 +3,8 @@
 **Twitter Clone Implementation**
 
 ## Group Members
-Ananda Bhaasita Desiraju - UFID: 40811191
-Nidhi Sharma - UFID: 68431215
+**Ananda Bhaasita Desiraju - UFID: 40811191**
+**Nidhi Sharma - UFID: 68431215**
 
 ## What's Working
 Twitter Clone has been implemented in Elixir using the actor model with the following functionalities:

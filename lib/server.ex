@@ -78,7 +78,6 @@ end
 @impl true
 def handle_cast({:userTweet, userName, userPID, tweetLimit, tweets}, state) do
     existingTweets = elem(Enum.at(:ets.lookup(:tweetsRegister,userName),0),3)
-    # IO.inspect(existingTweets)
     updatedTweets = existingTweets ++ [tweets]
     tweetLimit = tweetLimit + 1
     :ets.insert(:tweetsRegister, {userName, userPID, tweetLimit, updatedTweets})
@@ -90,7 +89,6 @@ end
 @impl true
 def handle_cast({:userTweetWithHashtags, userName, userPID, tweetLimit, tweets}, state) do
     existingTweets = elem(Enum.at(:ets.lookup(:hashtagsRegister,userName),0),3)
-    # IO.inspect(existingTweets)
     updatedTweets = existingTweets ++ [tweets]
     tweetLimit = tweetLimit + 1
     :ets.insert(:hashtagsRegister, {userName, userPID, tweetLimit, updatedTweets})
@@ -102,7 +100,6 @@ end
 @impl true
 def handle_cast({:userTweetWithMention, userName, userPID, tweetLimit, tweets, mentionedUser}, state) do
     existingTweets = elem(Enum.at(:ets.lookup(:mentionsRegister,userName),0),3)
-    # IO.inspect(existingTweets)
     updatedTweets = existingTweets ++ [tweets]
     tweetLimit = tweetLimit + 1
     :ets.insert(:mentionsRegister, {userName, userPID, tweetLimit, updatedTweets})
@@ -112,7 +109,7 @@ def handle_cast({:userTweetWithMention, userName, userPID, tweetLimit, tweets, m
 end
 
 @impl true
-def handle_cast({:addToFollowers, userName, followerName}, state) do
+def handle_cast({:addToFollowers, userName, followerName, userPID}, state) do
     existingFollowers = elem(Enum.at(:ets.lookup(:followersRegister,userName),0),1)
     updatedFollowers =  if(!Enum.member?(existingFollowers, followerName)) do
                             existingFollowers ++ [followerName]
@@ -127,6 +124,7 @@ def handle_cast({:addToFollowers, userName, followerName}, state) do
                             existingSubscribers
                         end
     :ets.insert(:followingRegister, {followerName, updatedSubscribers})
+    send(userPID, {:followerAdded, followerName})
     {:noreply, state}
 end
 
@@ -137,13 +135,9 @@ def handle_cast({:deleteRandomUsers, deleteUserName, usersToDelete}, state) do
     deleteCounter =  if((existingUser != nil) && deleteCounter <= usersToDelete ) do
         IO.puts("deleting user:")
         IO.inspect(deleteUserName)
-        # usersToDelete - 1
         :ets.insert(:userRegister, {deleteUserName, nil})
         :ets.insert(:deletedUsers, {deleteUserName, deleteCounter})
         deleteCounter = deleteCounter + 1
-    # else
-    #     IO.puts("Unable to delete!")
-    #     deleteCounter
     end
     {:noreply, state}
 end
@@ -151,13 +145,11 @@ end
 @impl true
 def handle_cast({:sendRetweets, userName, retweet, retweetOfUser, userPID}, state) do
     existingTweets = elem(Enum.at(:ets.lookup(:tweetsRegister,userName),0),3)
-    # IO.inspect(existingTweets)
     updatedTweets = existingTweets ++ [retweet]
     tweetLimit = elem(Enum.at(:ets.lookup(:tweetsRegister,userName),0),2)
     tweetLimit = tweetLimit + 1
     :ets.insert(:tweetsRegister, {userName, userPID, tweetLimit, updatedTweets})
     IO.inspect("#{userName} retweeted: #{retweet} of #{retweetOfUser}")
-    # send(userPID, {:userRetweeted})
     {:noreply, state}
 end
 
@@ -182,13 +174,15 @@ end
 
 #Server call for querying using mention
 @impl true
-def handle_cast({:queryMention, mentionedUserName, numOfUsers}, state) do
+def handle_cast({:queryMention, mentionedUserName, numOfUsers, userPID}, state) do
     IO.inspect("Tweets in which @#{mentionedUserName} is mentioned are:")
     mentionedUser = "@" <> mentionedUserName
     Enum.each(1..numOfUsers, fn x ->
         userName = "User"<>Integer.to_string(x)
-        listOfTweets = elem(Enum.at(:ets.lookup(:mentionsRegister, userName),0),3)
-        if !Enum.empty?(listOfTweets) do
+        listOfTweetsTuple = :ets.lookup(:mentionsRegister, userName)
+        if(listOfTweetsTuple != []) do
+            listOfTweets = elem(Enum.at(listOfTweetsTuple,0),3)
+            if !Enum.empty?(listOfTweets) do
             patternMatcher = Enum.at(Tuple.to_list(Regex.compile(mentionedUser)), 1)
             Enum.each(listOfTweets, fn tweet ->
                 if(String.match?(tweet, patternMatcher)) do
@@ -196,13 +190,14 @@ def handle_cast({:queryMention, mentionedUserName, numOfUsers}, state) do
                 end
             end)
         end
-
+    end
     end)
+    send(userPID, {:userMentioned, mentionedUser})
     {:noreply, state}
 end
 
 @impl true
-def handle_cast({:getAllTweets, userName, userSubscribedTo},state) do
+def handle_cast({:getAllTweets, userName, userSubscribedTo, userPID}, state) do
     followingTweetsList = elem(Enum.at(:ets.lookup(:tweetsRegister, userSubscribedTo),0),3)
     IO.puts("The tweets of #{userSubscribedTo} as Queried by #{userName}")
     if !Enum.empty?(followingTweetsList) do
@@ -211,44 +206,68 @@ def handle_cast({:getAllTweets, userName, userSubscribedTo},state) do
     else
         IO.puts("There are no Tweets by #{userSubscribedTo}")
     end
+    send(userPID, {:queryTweetSubscribedTo, userName, userSubscribedTo})
     {:noreply, state}
 end
 
 @impl true
-def handle_cast({:reconnectUser, userToReconnect}, state) do
-    reconnectUserPID = elem(Enum.at(:ets.lookup(:disconnectedUsers, userToReconnect),0),1)
+def handle_cast({:reconnectUser, userToReconnect, userPID}, state) do
+    reconnectUserTuple = :ets.lookup(:disconnectedUsers, userToReconnect)
+    reconnectUserPID = if (reconnectUserTuple != []) do
+        reconnectUserPID = elem(Enum.at(reconnectUserTuple,0),1)
+        reconnectUserPID
+    else
+        nil
+    end
     :ets.insert(:userRegister, {userToReconnect, reconnectUserPID})
     :ets.delete(:disconnectedUsers, userToReconnect)
     IO.inspect("#{userToReconnect} has been Reconnected!!")
+    send(userPID, {:reconnectedUser, userToReconnect})
     {:noreply, state}
 end
 
 @impl true
-def handle_cast({:getLiveView, userName}, state) do
+def handle_cast({:getLiveView, userName, userPID}, state) do
     tweets = elem(Enum.at(:ets.lookup(:tweetsRegister,userName),0),3)
     tweets = tweets ++ elem(Enum.at(:ets.lookup(:hashtagsRegister,userName),0),3)
     tweets = tweets ++ elem(Enum.at(:ets.lookup(:mentionsRegister,userName),0),3)
     IO.puts("_________________________________________LIVE VIEW of #{userName}_________________________________________")
     Enum.each(tweets, fn tweet -> IO.puts(tweet) end)
     IO.puts("____________________________________________________________________________________________________")
+    send(userPID, {:liveView, userName})
     {:noreply, state}
 end
 
 @impl true
-def handle_cast({:disconnectRandomUsers, userToDisconnect, numOfUsersToDisconnect}, state) do
-    activeUserPID = elem(Enum.at(:ets.lookup(:userRegister,userToDisconnect),0),1)
-    disconnectCounter = elem(Enum.at(:ets.lookup(:disconnectedUsers, userToDisconnect),0),2)
-    disconnectCounter =  if((activeUserPID != nil) && disconnectCounter <= numOfUsersToDisconnect ) do
-        :ets.insert(:disconnectedUsers, {userToDisconnect, activeUserPID, disconnectCounter})
-        :ets.insert(:userRegister, {userToDisconnect, nil})
-        IO.puts("#{userToDisconnect} is now Disconnected!!")
-        disconnectCounter = disconnectCounter + 1
-    end
+def handle_cast({:disconnectRandomUsers, userToDisconnect, numOfUsersToDisconnect, userPID}, state) do
+    activeUserTuple = :ets.lookup(:userRegister,userToDisconnect)
+    activeUserPID = if (activeUserTuple != []) do
+                        activeUserPID = elem(Enum.at(activeUserTuple,0),1)
+                        activeUserPID
+                    else
+                        []
+                    end
+    disconnectedUserTuple = :ets.lookup(:disconnectedUsers, userToDisconnect)
+    disconnectCounter = if (disconnectedUserTuple != []) do
+                            disconnectCounter = elem(Enum.at(disconnectedUserTuple,0),2)
+                            disconnectCounter
+                        else
+                            0
+                        end
+
+    disconnectCounter = if((activeUserPID != nil) && disconnectCounter <= numOfUsersToDisconnect ) do
+                            :ets.insert(:disconnectedUsers, {userToDisconnect, activeUserPID, disconnectCounter})
+                            :ets.insert(:userRegister, {userToDisconnect, nil})
+                            IO.puts("#{userToDisconnect} is now Disconnected!!")
+                            disconnectCounter = disconnectCounter + 1
+                            disconnectCounter
+                        end
+    send(userPID, {:userDisconnected, userToDisconnect})
     {:noreply, state}
 end
 
 @impl true
-def handle_cast({:addToZipfFollowers, userName, userFollowers}, state) do
+def handle_cast({:addToZipfFollowers, userName, userFollowers, userPID}, state) do
     if (userFollowers != nil or userFollowers != []) do
         :ets.insert(:followersRegister, {userName, userFollowers})
         Enum.each(userFollowers, fn(follower) ->
@@ -265,6 +284,7 @@ def handle_cast({:addToZipfFollowers, userName, userFollowers}, state) do
             end
         end)
     end
+    send(userPID, {:zipf, userName, userFollowers})
     {:noreply, state}
 end
 
@@ -284,8 +304,9 @@ def handle_call({:isExistingUser, userName}, _from, state) do
 end
 
 @impl true
-def handle_call({:getfollowingUsers, userName}, _from, state) do
+def handle_call({:getfollowingUsers, userName, userPID}, _from, state) do
     followingUsersList = elem(Enum.at(:ets.lookup(:followingRegister,userName),0),1)
+    send(userPID, {:gettingFollowerList, userName})
     {:reply, followingUsersList, state}
 end
 
@@ -320,10 +341,14 @@ end
 
 @impl true
 def handle_call({:getTweetLimit, userName}, _from, state) do
-    tweetLimit = elem(Enum.at(:ets.lookup(:tweetsRegister,userName),0),2)
-    # IO.inspect(tweetLimit)
+    tweetTuple = :ets.lookup(:tweetsRegister,userName)
+    tweetLimit =    if (tweetTuple != []) do
+                        tweetLimit = elem(Enum.at(tweetTuple,0),2)
+                        tweetLimit
+                    end
     {:reply, tweetLimit, state}
 end
+
 
 @impl true
 def handle_call({:getDisconnectedUsers, numOfUsers}, _from, state) do
@@ -337,25 +362,27 @@ def handle_call({:getDisconnectedUsers, numOfUsers}, _from, state) do
 end
 
 def getListOfDisconnectedUsers(startValue, numOfUsers, disConnectedList) when startValue <= numOfUsers do
-        userName = "User" <> Integer.to_string(startValue)
-        disconnectedTuple = :ets.lookup(:disconnectedUsers, userName)
-        disconnectedList = if(disconnectedTuple != []) do
-        disconnectedUser = elem(Enum.at(disconnectedTuple,0),0)
-        disConnectedList = if (disconnectedUser != nil or disconnectedUser != "") do
-            disConnectedList = disConnectedList ++ [disconnectedUser]
-            disConnectedList
-        end
-        disConnectedList
-        end
-        getListOfDisconnectedUsers(startValue+1, numOfUsers, disConnectedList)
+    userName = "User" <> Integer.to_string(startValue)
+    disconnectedTuple = :ets.lookup(:disconnectedUsers, userName)
+    disConnectedList =  if (!Enum.empty?(disconnectedTuple)) do
+    disConnectedList =  if (elem(Enum.at(disconnectedTuple,0),1) != nil) do
+                            disconnectedUser = elem(Enum.at(disconnectedTuple,0),0)
+                            disConnectedList =  disConnectedList ++ [disconnectedUser]
+                            disConnectedList
+                        else
+                            disConnectedList
+                        end
+                        disConnectedList
+                    else
+                        disConnectedList
+                    end
+
+    getListOfDisconnectedUsers(startValue+1, numOfUsers, disConnectedList)
 
 end
 
 def getListOfDisconnectedUsers(startValue, numOfUsers, disConnectedList) when startValue > numOfUsers do
-    # if (!Enum.empty?())
     disConnectedList
 end
-
-
 
 end

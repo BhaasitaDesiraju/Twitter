@@ -1,12 +1,12 @@
-defmodule Final.MixProject do
+defmodule Proj4.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :final,
+      app: :proj4,
       version: "0.1.0",
       elixir: "~> 1.9",
-      escript: [main_module: Final],
+      escript: [main_module: Proj4],
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]

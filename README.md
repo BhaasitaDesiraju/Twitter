@@ -21,7 +21,7 @@ Twitter Clone has been implemented in Elixir using the actor model with the foll
 10. Live view of tweets without querying
 11. Delete an account
 
-Bonus - Part
+## Bonus Part
 12. Live Connection and disconnection of users
 13. Zipf Distribution - Adding followers as per zipf distribution
 
@@ -35,7 +35,7 @@ escript proj4 numOfClients numRequests
 Ex: escript proj4 100 50
 
 ## Output
-User activity of all users will be displayed
+User activity of all users will be displayed.
 
 ## Observations 
 Maximum Number of Clients Created: 10000

@@ -20,7 +20,7 @@ defmodule Proj4 do
     createNewUsers(1,numOfUsers,numOfRequests, serverPID)
 
     endTime = System.monotonic_time(:millisecond) - startTime
-    IO.puts("Convergence time is #{endTime}")
+    IO.puts("Simulation time is #{endTime}ms")
 
     infiniteLoop()
   end

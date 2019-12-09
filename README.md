@@ -7,7 +7,7 @@
 **Nidhi Sharma - UFID: 68431215**
 
 ## What's Working
-Twitter Clone has been implemented in Elixir using the actor model with the following functionalities:
+Twitter Clone has been implemented in Elixir using the actor model with the following functionalities. Test cases have been added for all the functionalites.
 
 1. Register account
 2. Send tweets 
@@ -33,6 +33,9 @@ mix escript.build
 To Execute:
 escript proj4 numOfClients numRequests
 Ex: escript proj4 100 50
+
+To Test:
+mix test
 
 ## Output
 User activity of all users will be displayed.

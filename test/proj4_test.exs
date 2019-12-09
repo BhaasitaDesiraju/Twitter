@@ -362,12 +362,16 @@ defmodule Proj4Test do
     # test for live view
     test "Test to live view of a registered user" do
       numOfUsers = 10
+      numOfRequests = 5
       :ets.new(:serverNode, [:set, :public, :named_table])
       {:ok,serverID} = Server.start_link()
       serverPID = elem(Enum.at(:ets.lookup(:serverNode,"Server"),0),1)
       userName = "testUser23"
       Client.registerUser(serverPID, userName, self())
       assert_receive({:userRegistered, userToName})
+      testTweet = Client.getRandomTweet()
+      assert Client.sendTweets(serverPID, userName, self(), numOfRequests, testTweet) == :ok
+      assert_receive({:userTweeted, tweet})
       assert Client.retrieveUserLiveView(serverPID, userName, self(), numOfUsers) == {:ok, userName}
     end
 
